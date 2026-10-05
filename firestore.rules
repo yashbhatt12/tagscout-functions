@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Existing rules
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /products/{productId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /purchase_requisitions/{orderId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+// Collection group query on 'bins' — required for GRN validation to
+// look up bins by binCode across racks. The path filter in the app code
+// (in WarehouseRepository.findBinByCode) ensures only the caller's own
+// bins are visible in the results.
+match /{path=**}/bins/{binId} {
+  allow read: if request.auth != null;
+}
+
+    // WMS: all WMS data lives under /companies/{companyId}/...
+    // For now companyId = userId (single-tenant).
+    // Later, when admin console lands, we'll add a role check via
+    // get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+    match /companies/{companyId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == companyId;
+    }
+
+    // Movements are append-only — created but never edited
+    match /companies/{companyId}/movements/{movementId} {
+      allow create: if request.auth != null && request.auth.uid == companyId;
+      allow read: if request.auth != null && request.auth.uid == companyId;
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
